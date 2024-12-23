@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import joblib
 import numpy as np
@@ -38,6 +38,10 @@ class WeatherPredictor:
 #Instanciando o preditor
 predictor = WeatherPredictor()
 
+@app.route('/')
+def home():
+    return render_template('index.html')
+
 @app.route('/api/weather/current', methods=['GET'])
 def get_current_weather():
     #Recebendo dados meteorologicos
@@ -46,7 +50,7 @@ def get_current_weather():
         'humidity': 60 + np.random.normal(0, 5),
         'wind_speed': 10 + np.random.normal(0, 1),
         'precipitation': max(0, np.random.normal(0, 0.5)),
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
     }
     return jsonify(current_weather)
 
@@ -63,7 +67,7 @@ def get_forecast():
             'humidity': 60 + np.random.normal(0, 5),
             'wind_speed': 10 + np.random.normal(0, 1),
             'precipitation': max(0, np.random.normal(0, 0.5)),
-            'timestamp': future_time.isoformat()
+            'timestamp': future_time.strftime('%d/%m/%Y %H:%M:%S')
         }
         forecasts.append(forecast)
     return jsonify(forecasts)
@@ -81,7 +85,7 @@ def get_historical_data():
             'humidity': 60 + np.random.normal(0, 8),
             'wind_speed': 10 + np.random.normal(0, 2),
             'precipitation': max(0, np.random.normal(0, 1)),        
-            'timestamp': past_time.isoformat()
+            'timestamp': past_time.strftime('%d/%m/%Y %H:%M:%S')
         }
         historical_data.append(data_point)
     return jsonify(historical_data)
