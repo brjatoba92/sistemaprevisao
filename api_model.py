@@ -37,3 +37,15 @@ class WeatherPredictor:
         return self.model.predict(features)
 #Instanciando o preditor
 predictor = WeatherPredictor()
+
+@app.route('/api/weather/current', methods=['GET'])
+def get_current_weather():
+    #Recebendo dados meteorologicos
+    current_weather = {
+        'temperature': 25 + np.random.normal(0, 5),
+        'humidity': 60 + np.random.normal(0, 10),
+        'wind_speed': 10 + np.random.normal(0, 5),
+        'precipitation': max(0, np.random.normal(0, 0.5)),
+        'timestamp': datetime.now().isoformat()
+    }
+    return jsonify(current_weather)
