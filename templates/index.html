@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previsão do Tempo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .forecast { 
+            margin: 10px 0; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+   <div class="container">
+    <h1>Previsão do Tempo</h1>
+    <div>
+        <button onclick="getCurrentWeather()">Tempo Atual</button>
+        <button onclick="getForecast()">Obter Previsão para 24 horas</button>
+        <button onclick="getHistoricalData()">Dados Históricos</button>
+    </div>
+    <div id="result"></div>
+   </div>
+   <script>
+    function getCurrentWeather() {
+        fetch('/api/weather/current')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('result').innerHTML = `
+                    <h2>Tempo Atual</h2>
+                    <p>Temperatura: ${data.temperature.toFixed(2)}°C</p>
+                    <p>Umidade: ${data.humidity.toFixed(2)}%</p>
+                    <p>Velocidade do Vento: ${data.wind_speed.toFixed(2)} m/s</p>
+                    <p>Precipitação: ${data.precipitation.toFixed(2)} mm</p>
+                    <p>Timestamp: ${data.timestamp}</p>
+                `;
+            });
+    }
+
+    function getForecast() {
+        fetch('/api/weather/forecast')
+            .then(response => response.json())
+            .then(data => {
+                console.log(data); // Verifique todos os dados recebidos
+                let result = '<h2>Previsão para 24 horas</h2>';
+                data.forEach((forecast, index) => {
+                    console.log(forecast); // Verifique cada previsão individual
+                    result += `
+                        <div class="forecast">
+                            <p>Hora: ${forecast.timestamp}</p>
+                            <p>Temperatura: ${forecast.temperature.toFixed(2)}°C</p>
+                            <p>Umidade: ${forecast.humidity.toFixed(2)}%</p>
+                            <p>Velocidade do Vento: ${forecast.wind_speed.toFixed(2)} km/h</p>
+                            <p>Precipitação: ${forecast.precipitation.toFixed(2)} mm</p>
+                        </div>
+                    `;
+                });
+                document.getElementById('result').innerHTML = result;
+            })
+            .catch(error => {
+                document.getElementById('result').innerHTML = `<p>Erro ao obter a previsão: ${error.message}</p>`;
+            });
+    }
+
+    function getHistoricalData() {
+        const days = prompt("Quantos dias de dados históricos você deseja?");
+        fetch(`/api/weather/historical?days=${days}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log(data); // Verifique todos os dados recebidos
+                let result = `<h2>Dados Históricos para os últimos ${days} Dias</h2>`;
+                data.forEach(dataPoint => {
+                    console.log(dataPoint); // Verifique cada dado histórico individual
+                    result += `
+                        <div class="forecast">
+                            <p>Hora: ${dataPoint.timestamp}</p>
+                            <p>Temperatura: ${dataPoint.temperature.toFixed(2)}°C</p>
+                            <p>Umidade: ${dataPoint.humidity.toFixed(2)}%</p>
+                            <p>Velocidade do Vento: ${dataPoint.wind_speed.toFixed(2)} km/h</p>
+                            <p>Precipitação: ${dataPoint.precipitation.toFixed(2)} mm</p>
+                        </div>
+                    `;
+                });
+                document.getElementById('result').innerHTML = result;
+            })
+            .catch(error => {
+                document.getElementById('result').innerHTML = `<p>Erro ao obter dados históricos: ${error.message}</p>`;
+            });
+    }
+   </script>
+</body>
+</html>
