@@ -65,7 +65,7 @@ def get_forecast():
             'precipitation': max(0, np.random.normal(0, 0.5)),
             'timestamp': future_time.isoformat()
         }
-        forecast.append(forecast)
+        forecasts.append(forecast)
     return jsonify(forecasts)
 
 @app.route('/api/weather/historical', methods=['GET'])
