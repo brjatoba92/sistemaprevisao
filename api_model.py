@@ -49,3 +49,21 @@ def get_current_weather():
         'timestamp': datetime.now().isoformat()
     }
     return jsonify(current_weather)
+
+@app.route('/api/weather/forecast', methods=['GET'])
+def get_weather_forecast():
+    #Gerando previsão para as proximas 24 horas
+    forecasts = []
+    current_time = datetime.now()
+    for i in range(24):
+        future_time = current_time + timedelta(hours=i)
+        #Simulando previsão com alguma variação
+        forecast = {
+            'temperature': 25 + np.random.normal(0, 5),
+            'humidity': 60 + np.random.normal(0, 10),
+            'wind_speed': 10 + np.random.normal(0, 5),
+            'precipitation': max(0, np.random.normal(0, 0.5)),
+            'timestamp': future_time.isoformat()
+        }
+        forecast.append(forecast)
+    return jsonify(forecasts)
