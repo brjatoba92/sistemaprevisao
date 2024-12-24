@@ -8,12 +8,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from datetime import datetime, timedelta
+import os
+import dotenv as dt
 
 app = Flask(__name__)
 CORS(app)
 
-API_KEY = 'YOUR_API_KEY'
-BASE_URL = 'https://api.openweathermap.org/data/2.5/weather'
+#carrega variaveis do .env
+load_dotenv()
+
+#Criando a sessão
+API_KEY = os.getenv('API_KEY')
+BASE_URL = 'https://my.meteoblue.com/package/data'
 
 def get_weather_data(city):
     url = f"{BASE_URL}?q={city}&appid={API_KEY}&units=metric"
