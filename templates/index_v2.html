@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previsão do Tempo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .search-box {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .search-box input {
+            padding: 10px;
+            width: 60%;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .search-box button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .search-box button:hover {
+            background-color: #0056b3;
+        }
+        .weather-container {
+            display: grid;
+            gap: 20px;
+        }
+        .weather-card {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .error-message {
+            color: #dc3545;
+            padding: 10px;
+            background-color: #f8d7da;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="search-box">
+        <h1>Previsão do Tempo</h1>
+        <input 
+            type="text" 
+            id="cityInput" 
+            placeholder="Digite o nome da cidade" 
+            autofocus
+        >
+        <button onclick="updateWeather()">Buscar</button>
+    </div>
+
+    <div class="weather-container">
+        <div class="weather-card">
+            <h2>Tempo Atual</h2>
+            <div id="currentWeather">
+                <p class="loading">Digite uma cidade para ver o clima...</p>
+            </div>
+        </div>
+        
+        <div class="weather-card">
+            <h2>Previsão para as próximas 24 horas</h2>
+            <div id="forecast">
+                <p class="loading">Digite uma cidade para ver a previsão...</p>
+            </div>
+        </div>
+        
+        <div class="weather-card">
+            <h2>Dados Históricos</h2>
+            <div id="historical">
+                <p class="loading">Digite uma cidade para ver o histórico...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function updateWeather() {
+            const city = document.getElementById('cityInput').value || 'São Paulo';
+            if (!city.trim()) {
+                alert('Por favor, digite o nome de uma cidade');
+                return;
+            }
+            
+            document.getElementById('currentWeather').innerHTML = '<p class="loading">Carregando...</p>';
+            document.getElementById('forecast').innerHTML = '<p class="loading">Carregando...</p>';
+            document.getElementById('historical').innerHTML = '<p class="loading">Carregando...</p>';
+            
+            try {
+                // Buscar tempo atual
+                const currentResponse = await fetch(`/api/weather/current?city=${encodeURIComponent(city)}`);
+                const currentData = await currentResponse.json();
+                
+                if (currentData.error) {
+                    throw new Error(currentData.error);
+                }
+                
+                document.getElementById('currentWeather').innerHTML = `
+                    <p><strong>Cidade:</strong> ${currentData.city || city}</p>
+                    <p><strong>Temperatura:</strong> ${currentData.temperature}°C</p>
+                    <p><strong>Umidade:</strong> ${currentData.humidity}%</p>
+                    <p><strong>Velocidade do Vento:</strong> ${currentData.wind_speed} km/h</p>
+                    <p><strong>Precipitação:</strong> ${currentData.precipitation} mm</p>
+                `;
+
+                // Buscar previsão
+                const forecastResponse = await fetch(`/api/weather/forecast?city=${encodeURIComponent(city)}`);
+                const forecastData = await forecastResponse.json();
+
+                if (forecastData.error) {
+                    throw new Error(forecastData.error);
+                }
+
+                const forecasts = forecastData.forecasts || [];
+                
+                if (forecasts.length > 0) {
+                    const forecastHtml = forecasts
+                        .map(f => `
+                            <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
+                                <p><strong>Data:</strong> ${f.timestamp}</p>
+                                <p><strong>Temperatura:</strong> ${f.temperature}°C</p>
+                                <p><strong>Umidade:</strong> ${f.humidity}%</p>
+                                <p><strong>Velocidade do Vento:</strong> ${f.wind_speed} km/h</p>
+                            </div>
+                        `).join('');
+                    document.getElementById('forecast').innerHTML = forecastHtml;
+                } else {
+                    document.getElementById('forecast').innerHTML = '<p>Nenhum dado de previsão disponível</p>';
+                }
+
+                // Buscar dados históricos
+                const historicalResponse = await fetch(`/api/weather/historical?city=${encodeURIComponent(city)}&days=7`);
+                const historicalData = await historicalResponse.json();
+                
+                if (historicalData.error) {
+                    throw new Error(historicalData.error);
+                }
+
+                if (Array.isArray(historicalData) && historicalData.length > 0) {
+                    const historicalHtml = historicalData
+                        .slice(0, 5)
+                        .map(h => `
+                            <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
+                                <p><strong>Data:</strong> ${h.timestamp}</p>
+                                <p><strong>Temperatura:</strong> ${h.temperature}°C</p>
+                                <p><strong>Umidade:</strong> ${h.humidity}%</p>
+                            </div>
+                        `).join('');
+                    document.getElementById('historical').innerHTML = historicalHtml;
+                } else {
+                    document.getElementById('historical').innerHTML = '<p>Nenhum dado histórico disponível</p>';
+                }
+
+            } catch (error) {
+                console.error('Erro ao buscar dados:', error);
+                const errorMessage = error.message || 'Erro ao buscar dados meteorológicos. Verifique se a cidade existe.';
+                
+                document.getElementById('currentWeather').innerHTML = `<p class="error-message">${errorMessage}</p>`;
+                document.getElementById('forecast').innerHTML = `<p class="error-message">${errorMessage}</p>`;
+                document.getElementById('historical').innerHTML = `<p class="error-message">${errorMessage}</p>`;
+            }
+        }
+
+        // Adicionar evento de tecla Enter no input
+        document.getElementById('cityInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                updateWeather();
+            }
+        });
+    </script>
+</body>
+</html>
