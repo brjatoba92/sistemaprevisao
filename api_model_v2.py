@@ -9,16 +9,20 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from datetime import datetime, timedelta
 import logging
+import os
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 CORS(app)
+
+load_dotenv
 
 # Configuração de logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Configurações da API Climatempo
-CLIMATEMPO_API_KEY = "d28eb2737361a7897d75a20e4f9b2359"  # Substitua pela sua chave real
+CLIMATEMPO_API_KEY = os.getenv('API_KEY')  # Substitua pela sua chave real
 CLIMATEMPO_BASE_URL = "http://apiadvisor.climatempo.com.br/api/v1"
 
 class WeatherPredictor:
