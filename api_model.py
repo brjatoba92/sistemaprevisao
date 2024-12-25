@@ -1,132 +1,106 @@
-from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS
-import requests
-import joblib
 import numpy as np
 import pandas as pd
+import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler
-import os
-from dotenv import load_dotenv
-import datetime as dt
-
-app = Flask(__name__)
-CORS(app)
-
-load_dotenv()
-
-# Conexão com a API da Climatempo
-CLIMATEMPO_API_KEY = os.getenv('API_KEY')
-CLIMATEMPO_BASE_URL = "http://apiadvisor.climatempo.com.br/api/v1"
 
 class WeatherPredictor:
     def __init__(self):
         self.model = RandomForestRegressor(n_estimators=100, random_state=42)
-        self.scaler = StandardScaler
-    def prepare_data(self, data):
-        features = pd.DataFrame(data)
-        features['hour'] = pd.to_datetime(features.index).hour
-        features['day'] = pd.to_datetime(features.index).day
-        features['month'] = pd.to_datetime(features.index).month
-        return features
-
-    def train_model(self, features, target):
-        self.model.fit(features, target)
-        joblib.dump(self.model, 'weather_model.pkl')
-
-    def predict(self, features):
-        return self.model.predict(features)
-
-predictor = WeatherPredictor()
-
-def get_city_id(city_name):
-    response = requests.get(
-        f"{CLIMATEMPO_BASE_URL}/locale/city",
-        params={'name': city_name, 'token': CLIMATEMPO_API_KEY}
-    )
-    if response.status_code == 200:
-        cities = response.json()
-        return cities[0]['id'] if cities else None
-    return None
-
-###Rotas
-
-#Rota de retornar a pagina principal
-@app.route('/')
-def home():
-    return render_template('index_v2.html')
-#Rota de tempo atual
-@app.route('/api/weather/current', methods=['GET'])
-def get_current_weather():
-    city = request.args.get('city', 'São Paulo')
-    city_id = get_city_id(city)
-    if not city_id:
-        return jsonify({'error': f'Cidade nao encontrada: {city}'}), 404
-    url = f"{CLIMATEMPO_BASE_URL}/weather/locale/{city_id}/current"
-    params = {'token': CLIMATEMPO_API_KEY}
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        return jsonify({
-            'temperature': data['data']['temperature'],
-            'humidity': data['data']['humidity'],
-            'wind_speed': data['data']['wind_velocity'],
-            'precipitation': data['data']['rain'],
-            'timestamp': dt.datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
-            'city': city
-        })
-    return jsonify({'error': 'Erro ao obter dados meteorologicos'}), 500
-#Rota de previsão
-@app.route('/api/weather/forecast', methods=['GET'])
-def get_forecast():
-    city = request.args.get('city', 'São Paulo')
-    city_id = get_city_id(city)
-    if not city_id:
-        return jsonify({'error': f'Cidade nao encontrada: {city}'}), 404
-    response = requests.get(
-        f"{CLIMATEMPO_BASE_URL}/forecast/locale/{city_id}/hours/72",
-        params={'token': CLIMATEMPO_API_KEY}
-    )
-    if response.status_code == 200:
-        data = response.json()
-        forecasts = []
-        for hour_data in data['data'][:24]: # Limita a 24 horas
-            forecast = {
-                'temperature': hour_data['temperature'],
-                'humidity': hour_data['humidity'],
-                'wind_speed': hour_data['wind_velocity'],
-                'precipitation': hour_data['rain'],
-                'timestamp': hour_data['date'],
-                'city': city
-            }
-            forecasts.append(forecast)
-        return jsonify(forecasts)
-    return jsonify({'error': 'Erro ao obter previsao'}), 500
-
-#Rota de historico
-@app.route('/api/weather/historical', methods=['GET'])
-def get_historical_data():
-    city = request.args.get('city', 'São Paulo')
-    days = int(request.args.get('days', 7))
-    city_id = get_city_id(city)
-    if not city_id:
-        return jsonify({'error': f'Cidade nao encontrada: {city}'}), 404
+        self.scaler = StandardScaler()
     
-    end_date = dt.datetime.now()
-    start_date = end_date - dt.timedelta(days=days)
+    def prepare_data(self, data):
+        """
+        Prepara os dados para treinamento do modelo.
+        Parâmetros:
+        - data: DataFrame com os dados de temperatura, umidade, pressão, velocidade do vento e precipitação.
+        Retorna:
+        - X: DataFrame com as features para treinamento.
+        - y: Série com os valores de temperatura.
+        """
+        #Criando features com dados do dia anterior
+        data['temp_anterior'] = data['temperature'].shift(1)
+        data['umidade_anterior'] = data['humidity'].shift(1)
+        data['pressao_anterior'] = data['pressure'].shift(1)
+        #Removendo linhas com dados faltantes
+        data = data.dropna()
+        #Separando features e target
+        X = data[['temp_anterior', 'umidade_anterior', 'pressao_anterior']]
+        y = data['temperature']
 
-    response = requests.get(
-        f"{CLIMATEMPO_BASE_URL}/forecast/locale/{city_id}/historical",
-        params={
-            'token': CLIMATEMPO_API_KEY,
-            'start_date': start_date.strftime('%Y-%m-%d'),
-            'end_date': end_date.strftime('%Y-%m-%d')
+        return X, y
+
+    def train_model(self, X, y):
+        """
+        Treina o modelo com os dados de treinamento.
+        Parâmetros:
+        - X: DataFrame com as features para treinamento.
+        - y: Série com os valores de temperatura.
+        """
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        #Normalizando dados
+        self.scaler.fit(X_train)
+        X_train_scaled = self.scaler.transform(X_train)
+        X_test_scaled = self.scaler.transform(X_test)
+        #Treinando modelo
+        self.model.fit(X_train_scaled, y_train)
+        #Avaliando o modelo
+        y_pred = self.model.predict(X_test_scaled)
+        #Calculando métricas
+        mse = mean_squared_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+        return {
+            'mse': mse,
+            'rmse': np.sqrt(mse), 
+            'r2': r2
         }
-    )
-    if response.status_code == 200:
-        return jsonify(response.json())
-    return jsonify({'error': 'Erro ao obter dados históricos'}), 500
+    def predict(self, features):
+        #Normalizando dados
+        features_scaled = self.scaler.transform(features)
+        #Fazendo previsões
+        predictions = self.model.predict(features_scaled)
+        return predictions
 
+    def save_model(self, filepath):
+        joblib.dump({
+            'model': self.model,
+            'scaler': self.scaler
+        }, filepath)
+    def load_model(self, filepath):
+        saved_model = joblib.load(filepath)
+        self.model = saved_model['model']
+        self.scaler = saved_model['scaler']
+
+#Exemplo de uso
 if __name__ == '__main__':
-    app.run(debug=True)   
+    #Criando dados de exemplo
+    np.random.seed(42)
+    dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
+    data = pd.DataFrame({
+        'date': dates,
+        'temperature': np.random.normal(loc=20, scale=5, size=len(dates)),
+        'humidity': np.random.normal(loc=50, scale=10, size=len(dates)),    
+        'pressure': np.random.normal(loc=1013, scale=5, size=len(dates)),
+        'wind_speed': np.random.normal(loc=10, scale=5, size=len(dates)),
+        'precipitation': np.random.normal(loc=0, scale=5, size=len(dates))
+    })
+    #Inicializar e treinar o modelo
+    predictor = WeatherPredictor()
+    X, y = predictor.prepare_data(data)
+    metrics = predictor.train_model(X, y)
+    print("Metricas do modelo: ")
+    print(f'MSE: {metrics["mse"]}')
+    print(f'RMSE: {metrics["rmse"]}')
+    print(f'R2: {metrics["r2"]}')
+
+    #Fazendo previsões
+    new_data = X.iloc[-5:]
+    predictions = predictor.predict(new_data)
+    print("\nPrevisões para os proximos 5 dias:")
+    for i,pred in enumerate(predictions, 1):
+        print(f'Dia {i}: {pred:.1f}°C')
+
+    #Salvando e carregando o modelo
+    predictor.save_model('model.joblib')
