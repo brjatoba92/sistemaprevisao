@@ -1,95 +1,132 @@
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+import requests
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
-from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
+import datetime as dt
 
 app = Flask(__name__)
 CORS(app)
 
+load_dotenv()
+
+# Conexão com a API da Climatempo
+CLIMATEMPO_API_KEY = os.getenv('API_KEY')
+CLIMATEMPO_BASE_URL = "http://apiadvisor.climatempo.com.br/api/v1"
+
 class WeatherPredictor:
     def __init__(self):
         self.model = RandomForestRegressor(n_estimators=100, random_state=42)
-        self.scaler = StandardScaler()
-
+        self.scaler = StandardScaler
     def prepare_data(self, data):
-        #Convertendo dados meteorologicos para features
         features = pd.DataFrame(data)
-        #Extraindo caracteristicas temporais
-        data['hour'] = features.index.hour
-        data['day'] = features.index.day
-        data['month'] = features.index.month
+        features['hour'] = pd.to_datetime(features.index).hour
+        features['day'] = pd.to_datetime(features.index).day
+        features['month'] = pd.to_datetime(features.index).month
         return features
+
     def train_model(self, features, target):
-        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2)
-        #Normalizando dados
-        self.model = RandomForestRegressor(n_estimators=100, random_state=42)
-        self.model.fit(X_train, y_train)
-        #Salvando o modelo
+        self.model.fit(features, target)
         joblib.dump(self.model, 'weather_model.pkl')
+
     def predict(self, features):
-        if self.model is None:
-            self.model = joblib.load('weather_model.plk')
         return self.model.predict(features)
-#Instanciando o preditor
+
 predictor = WeatherPredictor()
 
+def get_city_id(city_name):
+    response = requests.get(
+        f"{CLIMATEMPO_BASE_URL}/locale/city",
+        params={'name': city_name, 'token': CLIMATEMPO_API_KEY}
+    )
+    if response.status_code == 200:
+        cities = response.json()
+        return cities[0]['id'] if cities else None
+    return None
+
+###Rotas
+
+#Rota de retornar a pagina principal
 @app.route('/')
 def home():
-    return render_template('index.html')
-
+    return render_template('index_v2.html')
+#Rota de tempo atual
 @app.route('/api/weather/current', methods=['GET'])
 def get_current_weather():
-    #Recebendo dados meteorologicos
-    current_weather = {
-        'temperature': 25 + np.random.normal(0, 2),
-        'humidity': 60 + np.random.normal(0, 5),
-        'wind_speed': 10 + np.random.normal(0, 1),
-        'precipitation': max(0, np.random.normal(0, 0.5)),
-        'timestamp': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-    }
-    return jsonify(current_weather)
-
+    city = request.args.get('city', 'São Paulo')
+    city_id = get_city_id(city)
+    if not city_id:
+        return jsonify({'error': f'Cidade nao encontrada: {city}'}), 404
+    url = f"{CLIMATEMPO_BASE_URL}/weather/locale/{city_id}/current"
+    params = {'token': CLIMATEMPO_API_KEY}
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        return jsonify({
+            'temperature': data['data']['temperature'],
+            'humidity': data['data']['humidity'],
+            'wind_speed': data['data']['wind_velocity'],
+            'precipitation': data['data']['rain'],
+            'timestamp': dt.datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'city': city
+        })
+    return jsonify({'error': 'Erro ao obter dados meteorologicos'}), 500
+#Rota de previsão
 @app.route('/api/weather/forecast', methods=['GET'])
 def get_forecast():
-    #Gerando previsão para as proximas 24 horas
-    forecasts = []
-    current_time = datetime.now()
-    for i in range(24):
-        future_time = current_time + timedelta(hours=i)
-        #Simulando previsão com alguma variação
-        forecast = {
-            'temperature': 25 + np.random.normal(0, 2) + np.sin(i / 24 * 2 * np.pi) * 5,
-            'humidity': 60 + np.random.normal(0, 5),
-            'wind_speed': 10 + np.random.normal(0, 1),
-            'precipitation': max(0, np.random.normal(0, 0.5)),
-            'timestamp': future_time.strftime('%d/%m/%Y %H:%M:%S')
-        }
-        forecasts.append(forecast)
-    return jsonify(forecasts)
+    city = request.args.get('city', 'São Paulo')
+    city_id = get_city_id(city)
+    if not city_id:
+        return jsonify({'error': f'Cidade nao encontrada: {city}'}), 404
+    response = requests.get(
+        f"{CLIMATEMPO_BASE_URL}/forecast/locale/{city_id}/hours/72",
+        params={'token': CLIMATEMPO_API_KEY}
+    )
+    if response.status_code == 200:
+        data = response.json()
+        forecasts = []
+        for hour_data in data['data'][:24]: # Limita a 24 horas
+            forecast = {
+                'temperature': hour_data['temperature'],
+                'humidity': hour_data['humidity'],
+                'wind_speed': hour_data['wind_velocity'],
+                'precipitation': hour_data['rain'],
+                'timestamp': hour_data['date'],
+                'city': city
+            }
+            forecasts.append(forecast)
+        return jsonify(forecasts)
+    return jsonify({'error': 'Erro ao obter previsao'}), 500
 
+#Rota de historico
 @app.route('/api/weather/historical', methods=['GET'])
 def get_historical_data():
-    #Simulando dados historicos
+    city = request.args.get('city', 'São Paulo')
     days = int(request.args.get('days', 7))
-    historical_data = []
-    current_time = datetime.now()
-    for i in range(days * 24):
-        past_time = current_time - timedelta(hours=i)
-        data_point = {
-            'temperature': 25 + np.random.normal(0, 3),
-            'humidity': 60 + np.random.normal(0, 8),
-            'wind_speed': 10 + np.random.normal(0, 2),
-            'precipitation': max(0, np.random.normal(0, 1)),        
-            'timestamp': past_time.strftime('%d/%m/%Y %H:%M:%S')
+    city_id = get_city_id(city)
+    if not city_id:
+        return jsonify({'error': f'Cidade nao encontrada: {city}'}), 404
+    
+    end_date = dt.datetime.now()
+    start_date = end_date - dt.timedelta(days=days)
+
+    response = requests.get(
+        f"{CLIMATEMPO_BASE_URL}/forecast/locale/{city_id}/historical",
+        params={
+            'token': CLIMATEMPO_API_KEY,
+            'start_date': start_date.strftime('%Y-%m-%d'),
+            'end_date': end_date.strftime('%Y-%m-%d')
         }
-        historical_data.append(data_point)
-    return jsonify(historical_data)
+    )
+    if response.status_code == 200:
+        return jsonify(response.json())
+    return jsonify({'error': 'Erro ao obter dados históricos'}), 500
 
 if __name__ == '__main__':
-    print("Servidor rodando na porta 5000")
-    app.run(debug=True)
+    app.run(debug=True)   
